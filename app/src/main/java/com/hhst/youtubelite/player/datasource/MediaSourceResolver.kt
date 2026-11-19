@@ -50,6 +50,13 @@ class MediaSourceResolver(
         startupParameters = parameters
     }
 
+    @Volatile private var muxedAudioListener: (() -> (MuxedHlsAudio.Selection) -> Unit)? = null
+
+    /** [listener] is asked once per resolve for the receiver of that source's muxed HLS audio tracks. */
+    fun onMuxedAudio(listener: () -> (MuxedHlsAudio.Selection) -> Unit) {
+        muxedAudioListener = listener
+    }
+
     data class Resolved(
         val mediaSource: MediaSource,
         val videoFormat: Format?,
@@ -88,6 +95,7 @@ class MediaSourceResolver(
         if (diagnosticContext != null) {
             val scoped = MediaSourceResolver(dataSources.withDiagnostics(diagnosticContext), startupBandwidth, startupVideoSupport, diagnosticContext)
             startupParameters?.let(scoped::configureStartupTrackSelection)
+            muxedAudioListener?.let(scoped::onMuxedAudio)
             return scoped.resolve(stream, metadata, preferredQuality, audioTrackKey, forceMuxed, subtitleKey, excludeClient)
         }
         val meta = sessionMetadata(metadata)
@@ -145,7 +153,10 @@ class MediaSourceResolver(
         stream.hlsUrl?.takeIf { it.isNotBlank() }?.let { url ->
             // Keep every named rendition. Stripping them down to one merged
             // file leaves the audio menu with only Default.
-            val parsers = AudioCodecHlsPlaylistParserFactory()
+            // A master without renditions carries each language as muxed
+            // variants of its own; play one language and report the rest.
+            val startupRetry = HlsStartupRetry()
+            val parsers = AudioCodecHlsPlaylistParserFactory(audioTrackKey, muxedAudioListener?.invoke(), startupRetry::masterLoaded)
             val select = startupVideoSupport?.let { support ->
                 { formats: List<MediaFormat>, estimate: Long ->
                     val parameters = startupParameters?.invoke()
@@ -159,7 +170,7 @@ class MediaSourceResolver(
                 }
             }
             val factory = HlsMediaSource.Factory(dataSources.vodHls(stream.hlsRequestPlan))
-                .setLoadErrorHandlingPolicy(PlaybackLoadErrorPolicy())
+                .setLoadErrorHandlingPolicy(PlaybackLoadErrorPolicy(startupRetry))
                 .setAllowChunklessPreparation(true)
                 .setPlaylistParserFactory(startupBandwidth?.let { StartupHlsPlaylistParserFactory(parsers, it, preferredQuality, select) } ?: parsers)
             val video = factory.createMediaSource(

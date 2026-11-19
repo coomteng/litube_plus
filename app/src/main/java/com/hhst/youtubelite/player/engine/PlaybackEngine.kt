@@ -56,6 +56,7 @@ import com.hhst.youtubelite.player.datasource.AudioTrackIdentity
 import com.hhst.youtubelite.player.datasource.CastAudioSelection
 import com.hhst.youtubelite.player.datasource.CodecCapabilities
 import com.hhst.youtubelite.player.datasource.MediaSourceResolver
+import com.hhst.youtubelite.player.datasource.MuxedHlsAudio
 import com.hhst.youtubelite.player.datasource.StartCappedSelectionFactory
 import com.hhst.youtubelite.player.datasource.StreamSelection
 import com.hhst.youtubelite.player.datasource.SubtitleSelection
@@ -456,6 +457,14 @@ class PlaybackEngine(
             }
         })
         resolver.configureStartupTrackSelection { trackSelector.parameters }
+        resolver.onMuxedAudio {
+            val generation = playbackGeneration.get()
+            val listener = { selection: MuxedHlsAudio.Selection ->
+                handler.post { if (stillCurrent(generation)) publishMuxedAudio(selection) }
+                Unit
+            }
+            listener
+        }
         // No tunneling: it is a decoder-pair constraint that
         // can silently veto track-selection changes on some devices.
         player.addListener(object : Player.Listener {
@@ -1133,6 +1142,14 @@ class PlaybackEngine(
         if (renditionKey != null && selectedRenditionKey() != renditionKey) {
             applyRenditionAudio(renditionKey)
         }
+    }
+
+    /**
+     * Muxed HLS has no audio tracks to switch between: the menu rows come from
+     * the master's variant URLs and a pick rebuilds the source for that language.
+     */
+    private fun publishMuxedAudio(selection: MuxedHlsAudio.Selection) {
+        _snapshot.value = _snapshot.value.copy(audioTracks = selection.choices, audioTrackKey = selection.selectedKey)
     }
 
     private fun rememberAudio(format: Format?) {

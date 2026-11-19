@@ -89,6 +89,33 @@ internal fun declareAudioCodecs(playlist: HlsPlaylist): HlsPlaylist {
     )
 }
 
+/** Keeps the variants [MuxedHlsAudio] selects for [trackKey] and reports the tracks it found. */
+@UnstableApi
+internal fun selectMuxedAudio(
+    playlist: HlsPlaylist,
+    trackKey: String?,
+    onSelection: ((MuxedHlsAudio.Selection) -> Unit)?,
+): HlsPlaylist {
+    val multi = playlist as? HlsMultivariantPlaylist ?: return playlist
+    val selection = MuxedHlsAudio.select(multi.variants.map { it.url.toString() }, trackKey) ?: return playlist
+    onSelection?.invoke(selection)
+    if (selection.keep.size == multi.variants.size) return playlist
+    return HlsMultivariantPlaylist(
+        multi.baseUri,
+        multi.tags,
+        selection.keep.map(multi.variants::get),
+        multi.videos,
+        multi.audios,
+        multi.subtitles,
+        multi.closedCaptions,
+        multi.muxedAudioFormat,
+        multi.muxedCaptionFormats,
+        multi.hasIndependentSegments,
+        multi.variableDefinitions,
+        multi.sessionKeyDrmInitData,
+    )
+}
+
 /** Original renditions are DEFAULT; dubs never are. Other names keep the manifest's flags. */
 @UnstableApi
 internal fun preferredSelectionFlags(name: String?, current: @C.SelectionFlags Int): @C.SelectionFlags Int = when {
@@ -114,7 +141,12 @@ private fun singleAudioCodec(codecs: String?): String? {
 }
 
 @UnstableApi
-internal class AudioCodecHlsPlaylistParserFactory : HlsPlaylistParserFactory {
+internal class AudioCodecHlsPlaylistParserFactory(
+    private val audioTrackKey: String? = null,
+    private val onMuxedAudio: ((MuxedHlsAudio.Selection) -> Unit)? = null,
+    /** Called for a master without audio renditions: every variant carries its own audio. */
+    private val onMuxedMaster: (() -> Unit)? = null,
+) : HlsPlaylistParserFactory {
     private val delegate = DefaultHlsPlaylistParserFactory()
 
     override fun createPlaylistParser(): ParsingLoadable.Parser<HlsPlaylist> =
@@ -128,6 +160,8 @@ internal class AudioCodecHlsPlaylistParserFactory : HlsPlaylistParserFactory {
 
     private fun stamp(parser: ParsingLoadable.Parser<HlsPlaylist>) =
         ParsingLoadable.Parser { uri: Uri, inputStream: InputStream ->
-            declareAudioCodecs(parser.parse(uri, inputStream))
+            val parsed = parser.parse(uri, inputStream)
+            if (parsed is HlsMultivariantPlaylist && parsed.audios.isEmpty() && parsed.variants.isNotEmpty()) onMuxedMaster?.invoke()
+            selectMuxedAudio(declareAudioCodecs(parsed), audioTrackKey, onMuxedAudio)
         }
 }
