@@ -42,7 +42,7 @@ data class Format(
     val audioLocale: String? = null,
     val audioTrackId: String? = null,
     val audioTrackName: String? = null,
-    /** `original`, `dubbed`, `descriptive`, or `secondary`. */
+    /** `original`, `dubbed`, `dubbed-auto`, `descriptive`, or `secondary`. */
     val audioTrackType: String? = null,
     /** True for the original audio track (vs. dubbed). */
     val audioTrackOriginal: Boolean = false,

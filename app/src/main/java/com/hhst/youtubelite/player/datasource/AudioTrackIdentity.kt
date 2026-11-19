@@ -166,6 +166,7 @@ object AudioTrackIdentity {
 
     private fun typeLabel(type: String?): String? = when (type?.lowercase()) {
         "dubbed" -> "Dubbed"
+        "dubbed-auto" -> "Dubbed (auto)"
         "descriptive" -> "Descriptive"
         "secondary" -> "Secondary"
         "original" -> "Original"

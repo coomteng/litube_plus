@@ -18,6 +18,8 @@ fun audioTrackLabel(choice: AudioTrackChoice): String {
     val type = when (choice.trackType?.lowercase(Locale.ROOT)) {
         "original" -> stringResource(R.string.download_audio_original)
         "dubbed" -> stringResource(R.string.download_audio_dubbed)
+        "dubbed-auto" -> stringResource(R.string.download_audio_dubbed) + " " +
+            stringResource(R.string.subtitle_auto_generated)
         "descriptive" -> stringResource(R.string.audio_description)
         "secondary" -> stringResource(R.string.secondary_audio)
         else -> null

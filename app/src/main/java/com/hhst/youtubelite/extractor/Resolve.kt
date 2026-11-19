@@ -203,8 +203,8 @@ private fun Stream.fillFrom(page: PlayerPage) {
                 requestPlan = candidate.requestPlan,
                 resourceIdentity = candidate.resourceIdentity,
                 expiresAtMillis = candidate.expiresAtMillis,
-            )?.withAudioIdentity(candidate) ?: candidate.asFormat()
-        }
+            )?.withAudioIdentity(candidate)?.withAudioTrackType(candidate) ?: candidate.asFormat()
+        }.let { AudioTrackTypes.withDefaultFallback(it, engine.candidates) }
         dashRequestPlan = engine.manifests.firstOrNull { it.url == dashUrl }?.requestPlan
         hlsRequestPlan = engine.manifests.firstOrNull { it.url == hlsUrl }?.requestPlan
         manifests = engine.manifests.map { Manifest(it.url, it.key.protocol, it.requestPlan, it.expiresAtMillis) }
@@ -243,8 +243,9 @@ private fun Format.withAudioIdentity(
     )
 }
 
-private fun StreamCandidate.asFormat(): Format {
+internal fun StreamCandidate.asFormat(): Format {
     val track = format.getObject("audioTrack")
+    val type = AudioTrackTypes.of(format)
     val id = key.audioTrack.ifBlank { track.getString("id", "") }.takeIf { it.isNotBlank() }
     val mime = format.getString("mimeType", "")
     val init = format.getObject("initRange")
@@ -270,12 +271,8 @@ private fun StreamCandidate.asFormat(): Format {
         audioLocale = id?.substringBefore('.')?.takeIf { it.isNotBlank() },
         audioTrackId = id,
         audioTrackName = track.getString("displayName", "").takeIf { it.isNotBlank() },
-        audioTrackType = when {
-            track.getBoolean("audioIsDefault", false) -> "original"
-            track.getBoolean("isAutoDubbed", false) -> "dubbed"
-            else -> null
-        },
-        audioTrackOriginal = track.getBoolean("audioIsDefault", false),
+        audioTrackType = type,
+        audioTrackOriginal = type == "original",
         formatKey = key,
         resourceIdentity = resourceIdentity,
         expiresAtMillis = expiresAtMillis,
